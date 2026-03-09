@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#219EBC">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    
+    <title>Lead Manager Pro - Ex-Car Edition</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    
+    <style>
+        :root {
+            --mac-bg: rgba(255, 255, 255, 0.85);
+            --mac-border: rgba(200, 200, 200, 0.4);
+            --mac-accent: #007AFF;
+            --mac-text: #1d1d1f;
+            --mac-red: #FF3B30;
+            --mac-green: #34C759;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #8ECAE6, #219EBC);
+            height: 100vh; margin: 0; display: flex; color: var(--mac-text);
+            overflow: hidden; -webkit-font-smoothing: antialiased;
+            touch-action: manipulation;
+        }
+
+        .main-content { 
+            flex: 1; 
+            padding: 80px 20px 40px; 
+            overflow-y: auto; 
+            -webkit-overflow-scrolling: touch; 
+        }
+
+        .forms-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .forms-container { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: 1fr !important; }
+            h1 { font-size: 1.5rem; }
+        }
+
+        #sidebar {
+            width: 280px; background: var(--mac-bg); backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px); border-left: 1px solid var(--mac-border);
+            padding: 25px; transform: translate3d(100%, 0, 0);
+            transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            position: fixed; right: 0; height: 100%; z-index: 1000;
+            display: flex; flex-direction: column; will-change: transform;
+        }
+        #sidebar.active { transform: translate3d(0, 0, 0); }
+
+        .toggle-btn {
+            position: fixed; top: 20px; right: 20px; z-index: 1001;
+            background: var(--mac-bg); backdrop-filter: blur(10px);
+            border: 1px solid var(--mac-border); border-radius: 12px;
+            width: 45px; height: 45px; cursor: pointer;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px;
+        }
+        .toggle-btn span { width: 20px; height: 2px; background: var(--mac-text); border-radius: 2px; }
+
+        .top-date {
+            position: absolute; top: 25px; left: 50%; transform: translateX(-50%);
+            text-align: center; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.2); pointer-events: none;
+            width: 100%;
+        }
+
+        #report-modal, #logout-confirm-modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4); backdrop-filter: blur(5px);
+            z-index: 2000; display: none; align-items: center; justify-content: center;
+        }
+        .modal-content {
+            background: var(--mac-bg); backdrop-filter: blur(30px);
+            width: 90%; max-width: 500px; border-radius: 20px; padding: 25px;
+            border: 1px solid var(--mac-border); box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+            max-height: 90vh; overflow-y: auto;
+        }
+
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 15px; }
+        .calendar-day { 
+            padding: 10px 5px; text-align: center; border-radius: 8px; cursor: pointer; 
+            font-size: 12px; transition: 0.2s; border: 1px solid transparent;
+        }
+        .calendar-day.selected { background: var(--mac-accent) !important; color: white; }
+        .calendar-day.in-range { background: rgba(0,122,255,0.2); }
+        .calendar-day.header { font-weight: bold; color: #86868b; cursor: default; }
+
+        .btn-report-menu {
+            background: #34C759; margin-top: 15px; width: 100%; display: flex;
+            align-items: center; justify-content: center; gap: 8px;
+        }
+
+        .card {
+            background: var(--mac-bg); backdrop-filter: blur(15px); border-radius: 18px;
+            border: 1px solid var(--mac-border); padding: 20px; margin-bottom: 25px;
+        }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        button { background: var(--mac-accent); color: white; border: none; padding: 12px; border-radius: 10px; cursor: pointer; font-weight: 600; transition: opacity 0.2s; }
+        button:active { opacity: 0.8; }
+        button.active-mode { background: #0056b3; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); }
+        
+        input, select { 
+            padding: 12px; border-radius: 8px; border: 1px solid var(--mac-border); 
+            background: rgba(255,255,255,0.8); width: 100%; margin-bottom: 10px; 
+            font-size: 16px; box-sizing: border-box;
+        }
+
+        #ddd-map { height: 180px; background: rgba(0,0,0,0.05); border-radius: 12px; display: flex; flex-wrap: wrap; gap: 5px; padding: 10px; overflow-y: auto; }
+        .map-pin { padding: 5px 8px; border-radius: 15px; font-size: 10px; font-weight: bold; color: white; }
+
+        .table-responsive { overflow-x: auto; width: 100%; }
+        table { width: 100%; border-collapse: collapse; min-width: 400px; }
+        th { font-weight: 600; color: #86868b; font-size: 11px; text-align: left; }
+        td { padding: 12px 0; border-bottom: 1px solid var(--mac-border); font-size: 14px; }
+        .hidden { display: none !important; }
+
+        .progress-wrapper { background: rgba(0,0,0,0.1); border-radius: 10px; height: 24px; position: relative; overflow: hidden; }
+        .progress-bar { height: 100%; background: var(--mac-accent); transition: width 0.5s ease; width: 0%; }
+        .progress-text { position: absolute; width: 100%; text-align: center; top: 2px; font-weight: bold; font-size: 14px; color: var(--mac-text); }
+        .label-mini { font-size: 11px; font-weight: bold; color: #666; margin-bottom: 4px; display: block; }
+    </style>
+</head>
+<body>
+
+    <div class="top-date">
+        <div id="date-day" style="font-size: 1.1rem; font-weight: 700;">...</div>
+        <div id="date-full" style="font-size: 0.8rem; opacity: 0.9;">...</div>
+    </div>
+
+    <button class="toggle-btn" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
+
+    <div id="sidebar">
+        <div id="profile-view" class="hidden">
+            <div style="width: 60px; height: 60px; background: var(--mac-accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 24px; font-weight: bold; margin: 10px auto 15px;" id="user-initial">-</div>
+            <p style="text-align: center; font-weight: 600;" id="display-name">...</p>
+            <button class="btn-report-menu" onclick="openReportModal()">📊 Gerar Relatório</button>
+            <div style="margin-top: 15px; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--mac-border); padding-top: 15px;">
+                <button onclick="exportBackup()" style="background: #636366; font-size: 0.85rem;">Exportar JSON</button>
+                <button onclick="document.getElementById('import-file').click()" style="background: #48484a; font-size: 0.85rem;">Importar Backup</button>
+                <input type="file" id="import-file" style="display:none" accept=".json" onchange="importBackup(this)">
+            </div>
+            <br>
+            <button onclick="openLogoutModal()" style="background: var(--mac-red); width: 100%;">Deslogar / Reset</button>
+        </div>
+        <div id="auth-view">
+            <h3 style="text-align: center;">Acesso Consultor</h3>
+            <input type="text" id="auth-user" placeholder="Nome">
+            <input type="password" id="auth-pass" placeholder="Senha">
+            <button onclick="handleAuth()" style="width: 100%;">Entrar</button>
+        </div>
+    </div>
+
+    <div id="logout-confirm-modal">
+        <div class="modal-content" style="text-align: center;">
+            <h3 style="color: var(--mac-red);">⚠️ Atenção!</h3>
+            <p>O reset apaga <b>todos os dados</b> permanentemente.</p>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button onclick="closeLogoutModal()" style="flex: 1; background: #8e8e93;">Cancelar</button>
+                <button onclick="confirmLogoutReset()" style="flex: 1; background: var(--mac-red);">Apagar Tudo</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="report-modal">
+        <div class="modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin:0;">Relatórios</h3>
+                <button onclick="closeReportModal()" style="background:none; border:none; color:var(--mac-text); font-size:20px;">✕</button>
+            </div>
+            <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
+                <button onclick="changeMonth(-1)">◀</button>
+                <span id="calendar-month-year" style="font-weight: bold;">...</span>
+                <button onclick="changeMonth(1)">▶</button>
+            </div>
+            <div class="calendar-grid" id="calendar-days"></div>
+            <div style="margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <button onclick="setFilterMode('day')" id="btn-mode-day" class="active-mode">Dia</button>
+                <button onclick="setFilterMode('week')" id="btn-mode-week">Semana</button>
+                <button onclick="setFilterMode('month')" id="btn-mode-month">Mês</button>
+                <button onclick="setFilterMode('range')" id="btn-mode-range">Período</button>
+            </div>
+            <button onclick="generatePDF()" style="width:100%; margin-top: 15px; background: #34C759;">Gerar PDF</button>
+        </div>
+    </div>
+
+    <div class="main-content" id="main-scroll">
+        <h1 style="color: white; margin-top: 0; text-align: center;">Lead Manager Pro</h1>
+
+        <div class="stats-grid">
+            <div class="card" style="text-align:center"><h4>Hoje</h4><h2 id="leads-today">0</h2></div>
+            <div class="card" style="text-align:center"><h4>Semana</h4><h2 id="leads-week">0</h2></div>
+            <div class="card" style="text-align:center"><h4>Mês</h4><h2 id="leads-month">0</h2></div>
+        </div>
+
+        <div class="forms-container">
+            <div class="card">
+                <h3 style="margin-top: 0;">Novo Registro</h3>
+                <label class="label-mini">Data</label>
+                <input type="date" id="input-date">
+                <label class="label-mini">Região</label>
+                <select id="select-ddd"></select>
+                <label class="label-mini">Quantidade</label>
+                <input type="number" id="input-qtd" placeholder="Ex: 5">
+                <button onclick="addLead()" style="width: 100%;">Salvar Registro</button>
+            </div>
+
+            <div class="card" style="border: 1px solid var(--mac-green);">
+                <h3 style="margin-top: 0; color: var(--mac-green);">Leads Verdes (Vendas)</h3>
+                <label class="label-mini">Data da Venda</label>
+                <input type="date" id="input-green-date">
+                <label class="label-mini">Região</label>
+                <select id="select-green-ddd"></select>
+                <label class="label-mini">Qtd Vendida</label>
+                <input type="number" id="input-green-qtd" placeholder="Ex: 1">
+                <button onclick="addGreenLead()" style="width: 100%; background: var(--mac-green);">Confirmar Venda</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 style="margin-top: 0;">Metas Mensais</h3>
+            <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;">
+                <div style="flex: 1; min-width: 120px;">
+                    <label class="label-mini">Mês</label>
+                    <select id="goal-month-selector" onchange="updateUI()"></select>
+                </div>
+                <div style="flex: 1; min-width: 120px;">
+                    <label class="label-mini">Meta</label>
+                    <input type="number" id="goal-target" value="100" onchange="saveGoalConfig()">
+                </div>
+            </div>
+            <div class="progress-wrapper">
+                <div class="progress-bar" id="goal-progress-bar"></div>
+                <div class="progress-text" id="goal-progress-text">0/100 (0%)</div>
+            </div>
+            <div id="goal-status-msg" style="text-align: center; font-weight: bold; color: var(--mac-accent); margin-top: 10px;"></div>
+        </div>
+
+        <div class="card">
+            <h3>Geografia de Leads</h3>
+            <div style="height: 200px;"><canvas id="leadsChart"></canvas></div>
+        </div>
+
+        <div class="card">
+            <h3>Mapa por DDD</h3>
+            <div id="ddd-map"></div>
+        </div>
+
+        <div class="card">
+            <h3>Histórico (Últimos 8)</h3>
+            <div class="table-responsive">
+                <table id="leads-table">
+                    <thead><tr><th>Data</th><th>Tipo</th><th>DDD</th><th>Qtd</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Registro de Service Worker para Instalação (PWA) ---
+        if ('serviceWorker' in navigator) {
+            const swCode = `
+                self.addEventListener('install', e => self.skipWaiting());
+                self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));
+            `;
+            const blob = new Blob([swCode], {type: 'text/javascript'});
+            navigator.serviceWorker.register(URL.createObjectURL(blob));
+        }
+
+        let leadsData = JSON.parse(localStorage.getItem('leads_db')) || [];
+        let leadsVerdes = JSON.parse(localStorage.getItem('leads_verdes_db')) || []; 
+        let users = JSON.parse(localStorage.getItem('users_db')) || [];
+        let currentUser = JSON.parse(localStorage.getItem('logged_session')) || null;
+        let goalsConfig = JSON.parse(localStorage.getItem('goals_db')) || {};
+        let chartInstance = null;
+        let currentCalDate = new Date();
+        let selectedDates = []; 
+        let filterMode = 'day'; 
+
+        window.onload = () => {
+            initDDDs();
+            initGoalMonths();
+            updateClock();
+            renderAuth();
+            updateUI();
+            document.getElementById('input-date').valueAsDate = new Date();
+            document.getElementById('input-green-date').valueAsDate = new Date();
+        };
+
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('active'); }
+        function openReportModal() { document.getElementById('report-modal').style.display = 'flex'; renderCalendar(); }
+        function closeReportModal() { document.getElementById('report-modal').style.display = 'none'; }
+        function openLogoutModal() { document.getElementById('logout-confirm-modal').style.display = 'flex'; }
+        function closeLogoutModal() { document.getElementById('logout-confirm-modal').style.display = 'none'; }
+
+        function confirmLogoutReset() {
+            const pass = prompt("Senha ADM para RESET:");
+            if(pass === 'Hudson@2026') {
+                localStorage.clear();
+                location.reload();
+            } else alert("Incorreta");
+        }
+
+        function initDDDs() {
+            const selects = [document.getElementById('select-ddd'), document.getElementById('select-green-ddd')];
+            const ddds = [11,12,13,14,15,16,17,18,19,21,22,24,27,28,31,32,33,34,35,37,38,41,42,43,44,45,46,47,48,49,51,53,54,55,61,62,63,64,65,66,67,68,69,71,73,74,75,77,79,81,82,83,84,85,86,87,88,89,91,92,93,94,95,96,97,98,99];
+            selects.forEach(s => {
+                s.innerHTML = '';
+                ddds.forEach(d => s.add(new Option(`DDD ${d}`, d)));
+            });
+        }
+
+        function initGoalMonths() {
+            const selector = document.getElementById('goal-month-selector');
+            const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+            const now = new Date();
+            selector.innerHTML = '';
+            months.forEach((m, i) => {
+                const val = `${now.getFullYear()}-${String(i+1).padStart(2, '0')}`;
+                selector.add(new Option(m, val));
+            });
+            selector.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2, '0')}`;
+        }
+
+        function handleAuth() {
+            const name = document.getElementById('auth-user').value.trim();
+            const pass = document.getElementById('auth-pass').value;
+            if(!name) return;
+            let user = users.find(u => u.name === name && u.pass === pass);
+            if(!user && users.length === 0) {
+                user = {name, pass};
+                users.push(user);
+                localStorage.setItem('users_db', JSON.stringify(users));
+            }
+            if(user) {
+                currentUser = user;
+                localStorage.setItem('logged_session', JSON.stringify(user));
+                renderAuth();
+            } else alert("Credenciais Inválidas");
+        }
+
+        function renderAuth() {
+            const isLogged = !!currentUser;
+            document.getElementById('auth-view').classList.toggle('hidden', isLogged);
+            document.getElementById('profile-view').classList.toggle('hidden', !isLogged);
+            if(isLogged) {
+                document.getElementById('display-name').innerText = currentUser.name;
+                document.getElementById('user-initial').innerText = currentUser.name[0].toUpperCase();
+            }
+        }
+
+        function addLead() {
+            const ddd = document.getElementById('select-ddd').value;
+            const qtd = parseInt(document.getElementById('input-qtd').value);
+            const dateVal = document.getElementById('input-date').value;
+            if(!qtd || !currentUser || !dateVal) return alert("Preencha todos os campos");
+            leadsData.push({ ddd, qtd, consultor: currentUser.name, timestamp: new Date(dateVal + 'T12:00:00').toISOString(), type: 'Entrada' });
+            localStorage.setItem('leads_db', JSON.stringify(leadsData));
+            updateUI();
+            document.getElementById('input-qtd').value = '';
+        }
+
+        function addGreenLead() {
+            const ddd = document.getElementById('select-green-ddd').value;
+            const qtd = parseInt(document.getElementById('input-green-qtd').value);
+            const dateVal = document.getElementById('input-green-date').value;
+            if(!qtd || !currentUser || !dateVal) return alert("Preencha todos os campos");
+            leadsVerdes.push({ ddd, qtd, consultor: currentUser.name, timestamp: new Date(dateVal + 'T12:00:00').toISOString(), type: 'Verde' });
+            localStorage.setItem('leads_verdes_db', JSON.stringify(leadsVerdes));
+            updateUI();
+            document.getElementById('input-green-qtd').value = '';
+        }
+
+        function updateUI() {
+            const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
+            let t=0, w=0, m=0;
+            const counts = {};
+            const selectedGoalMonth = document.getElementById('goal-month-selector').value;
+            let totalMonthGreens = 0;
+
+            leadsData.forEach(l => {
+                const lDate = new Date(l.timestamp);
+                if(l.timestamp.startsWith(todayStr)) t += l.qtd;
+                if((now - lDate) < 7*24*60*60*1000) w += l.qtd;
+                if(l.timestamp.startsWith(selectedGoalMonth)) m += l.qtd;
+                counts[l.ddd] = (counts[l.ddd] || 0) + l.qtd;
+            });
+
+            leadsVerdes.forEach(lv => {
+                if(lv.timestamp.startsWith(selectedGoalMonth)) totalMonthGreens += lv.qtd;
+            });
+
+            document.getElementById('leads-today').innerText = t;
+            document.getElementById('leads-week').innerText = w;
+            document.getElementById('leads-month').innerText = m;
+            
+            updateGoals(totalMonthGreens, selectedGoalMonth);
+            updateChart(counts);
+            updateMap(counts);
+            updateTable();
+        }
+
+        function updateGoals(realizados, monthKey) {
+            const target = goalsConfig[monthKey] || 100;
+            document.getElementById('goal-target').value = target;
+            const percent = target > 0 ? Math.round((realizados / target) * 100) : 0;
+            document.getElementById('goal-progress-bar').style.width = Math.min(100, percent) + '%';
+            document.getElementById('goal-progress-text').innerText = `${realizados}/${target} (${percent}%)`;
+            
+            if(percent >= 100) {
+                document.getElementById('goal-status-msg').innerText = `Meta Batida! ${percent}% 🏆`;
+                document.getElementById('goal-status-msg').style.color = "var(--mac-green)";
+            } else {
+                document.getElementById('goal-status-msg').innerText = `Faltam ${target - realizados} para a meta`;
+                document.getElementById('goal-status-msg').style.color = "var(--mac-accent)";
+            }
+        }
+
+        function saveGoalConfig() {
+            const key = document.getElementById('goal-month-selector').value;
+            goalsConfig[key] = parseInt(document.getElementById('goal-target').value) || 0;
+            localStorage.setItem('goals_db', JSON.stringify(goalsConfig));
+            updateUI();
+        }
+
+        function updateMap(counts) {
+            const map = document.getElementById('ddd-map'); map.innerHTML = '';
+            Object.keys(counts).sort((a,b) => counts[b] - counts[a]).forEach(ddd => {
+                const pin = document.createElement('div');
+                pin.className = 'map-pin';
+                pin.style.background = `rgba(0, 122, 255, 0.7)`;
+                pin.innerHTML = `${ddd} (${counts[ddd]})`;
+                map.appendChild(pin);
+            });
+        }
+
+        function updateTable() {
+            const combined = [...leadsData, ...leadsVerdes].sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+            document.querySelector('#leads-table tbody').innerHTML = combined.slice(0, 8).map(l => `
+                <tr style="${l.type === 'Verde' ? 'color: var(--mac-green); font-weight: bold;' : ''}">
+                    <td>${new Date(l.timestamp).toLocaleDateString('pt-BR')}</td>
+                    <td>${l.type}</td>
+                    <td>${l.ddd}</td>
+                    <td>${l.qtd}</td>
+                </tr>
+            `).join('');
+        }
+
+        function updateChart(counts) {
+            const ctx = document.getElementById('leadsChart').getContext('2d');
+            const keys = Object.keys(counts);
+            if(chartInstance) chartInstance.destroy();
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: keys, datasets: [{ label: 'Leads', data: keys.map(k => counts[k]), backgroundColor: '#007AFF' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {display:false} } }
+            });
+        }
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('date-day').innerText = now.toLocaleDateString('pt-BR', {weekday: 'long'}).toUpperCase();
+            document.getElementById('date-full').innerText = now.toLocaleDateString('pt-BR', {day: 'numeric', month: 'long'});
+        }
+
+        function renderCalendar() {
+            const grid = document.getElementById('calendar-days');
+            grid.innerHTML = '';
+            const daysLabel = ['D','S','T','Q','Q','S','S'];
+            daysLabel.forEach(d => grid.innerHTML += `<div class="calendar-day header">${d}</div>`);
+            
+            const year = currentCalDate.getFullYear(), month = currentCalDate.getMonth();
+            document.getElementById('calendar-month-year').innerText = `${month+1}/${year}`;
+            
+            const firstDay = new Date(year, month, 1).getDay();
+            const lastDate = new Date(year, month + 1, 0).getDate();
+
+            for(let i=0; i<firstDay; i++) grid.innerHTML += `<div></div>`;
+            
+            for(let d=1; d<=lastDate; d++) {
+                const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                const div = document.createElement('div');
+                div.className = 'calendar-day';
+                if(selectedDates.includes(dateStr)) div.classList.add('selected');
+                
+                div.innerText = d;
+                div.onclick = () => handleDateSelection(dateStr);
+                grid.appendChild(div);
+            }
+        }
+
+        function handleDateSelection(dateStr) {
+            const clickedDate = new Date(dateStr + 'T12:00:00');
+            
+            if(filterMode === 'day') {
+                selectedDates = [dateStr];
+            } 
+            else if(filterMode === 'week') {
+                selectedDates = [];
+                const dayOfWeek = clickedDate.getDay();
+                const start = new Date(clickedDate);
+                start.setDate(clickedDate.getDate() - dayOfWeek);
+                for(let i=0; i<7; i++) {
+                    const d = new Date(start);
+                    d.setDate(start.getDate() + i);
+                    selectedDates.push(d.toISOString().split('T')[0]);
+                }
+            } 
+            else if(filterMode === 'month') {
+                selectedDates = [];
+                const lastDay = new Date(clickedDate.getFullYear(), clickedDate.getMonth() + 1, 0).getDate();
+                for(let i=1; i<=lastDay; i++) {
+                    selectedDates.push(`${clickedDate.getFullYear()}-${String(clickedDate.getMonth()+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`);
+                }
+            } 
+            else if(filterMode === 'range') {
+                if(selectedDates.length === 1) {
+                    const start = new Date(selectedDates[0] + 'T12:00:00');
+                    const end = clickedDate;
+                    const d1 = start < end ? start : end;
+                    const d2 = start < end ? end : start;
+                    selectedDates = [];
+                    let current = new Date(d1);
+                    while(current <= d2) {
+                        selectedDates.push(current.toISOString().split('T')[0]);
+                        current.setDate(current.getDate() + 1);
+                    }
+                } else {
+                    selectedDates = [dateStr];
+                }
+            }
+            renderCalendar();
+        }
+
+        function setFilterMode(m) {
+            filterMode = m;
+            selectedDates = [];
+            document.querySelectorAll('[id^="btn-mode-"]').forEach(b => b.classList.remove('active-mode'));
+            document.getElementById(`btn-mode-${m}`).classList.add('active-mode');
+            renderCalendar();
+        }
+
+        function changeMonth(n) { currentCalDate.setMonth(currentCalDate.getMonth() + n); renderCalendar(); }
+
+        function generatePDF() {
+            if(selectedDates.length === 0) return alert("Selecione uma data no calendário!");
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const now = new Date();
+            const todayFormatted = now.toLocaleDateString('pt-BR').replace(/\//g, '-');
+            
+            let tipoNome = "Diario";
+            let descRelatorio = "Relatório Diário";
+            if(filterMode === 'week') { tipoNome = "Semanal"; descRelatorio = "Relatório Semanal"; }
+            if(filterMode === 'month') { tipoNome = "Mensal"; descRelatorio = "Relatório Mensal"; }
+            if(filterMode === 'range') { tipoNome = "Periodo"; descRelatorio = "Relatório de Período Personalizado"; }
+
+            const fileName = `Relatorio_${tipoNome}_${todayFormatted}.pdf`;
+
+            doc.setFontSize(18);
+            doc.setTextColor(33, 158, 188);
+            doc.text("LEAD MANAGER PRO - EX-CAR", 14, 20);
+            
+            doc.setFontSize(12);
+            doc.setTextColor(100);
+            doc.text(descRelatorio, 14, 28);
+            doc.text(`Gerado em: ${now.toLocaleString('pt-BR')}`, 14, 34);
+
+            const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2, '0')}`;
+            const target = goalsConfig[currentMonthKey] || 0;
+            let realizados = 0;
+            leadsVerdes.forEach(lv => {
+                if(lv.timestamp.startsWith(currentMonthKey)) realizados += lv.qtd;
+            });
+            const percent = target > 0 ? ((realizados / target) * 100).toFixed(1) : 0;
+            const statusMeta = realizados >= target ? "META BATIDA" : `Faltam ${target - realizados} para a meta`;
+
+            doc.setFontSize(11);
+            doc.setTextColor(0);
+            doc.text(`--- STATUS DE METAS (MÊS ATUAL) ---`, 14, 45);
+            doc.text(`Mês: ${currentMonthKey} | Meta: ${target} | Realizado: ${realizados}`, 14, 52);
+            doc.text(`Progresso: ${percent}% | Status: ${statusMeta}`, 14, 58);
+
+            const filtered = [...leadsData, ...leadsVerdes].filter(l => {
+                const d = l.timestamp.split('T')[0];
+                return selectedDates.includes(d);
+            }).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+            const tableData = filtered.map(l => [
+                new Date(l.timestamp).toLocaleDateString('pt-BR'),
+                l.type,
+                l.ddd,
+                l.qtd,
+                l.consultor
+            ]);
+
+            doc.autoTable({
+                head: [['Data', 'Tipo', 'DDD', 'Qtd', 'Consultor']],
+                body: tableData,
+                startY: 65,
+                theme: 'striped',
+                headStyles: { fillColor: [33, 158, 188] }
+            });
+
+            doc.save(fileName);
+        }
+
+        function exportBackup() {
+            const data = { leads: leadsData, verdes: leadsVerdes, goals: goalsConfig };
+            const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+            a.download = "backup_lead_manager.json"; a.click();
+        }
+
+        function importBackup(input) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    leadsData = data.leads || [];
+                    leadsVerdes = data.verdes || [];
+                    goalsConfig = data.goals || {};
+                    localStorage.setItem('leads_db', JSON.stringify(leadsData));
+                    localStorage.setItem('leads_verdes_db', JSON.stringify(leadsVerdes));
+                    localStorage.setItem('goals_db', JSON.stringify(goalsConfig));
+                    updateUI();
+                    alert("Backup importado!");
+                } catch(err) { alert("Arquivo inválido"); }
+            };
+            reader.readAsText(input.files[0]);
+        }
+    </script>
+</body>
+</html>
